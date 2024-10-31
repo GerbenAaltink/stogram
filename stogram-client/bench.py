@@ -23,4 +23,4 @@ async def main(cmd,times):
 
 times = int(sys.argv[1])
 
-asyncio.run(main("./venv/bin/stogram", times))
+asyncio.run(main("./venv/bin/stogram_bench 1000", times))

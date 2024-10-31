@@ -6,8 +6,10 @@ env:
 	python3 -m venv ./venv
 
 bench:
-	python bench.py 100
+	./venv/bin/stogram_bench 1000
 
+debug:
+	./venv/bin/stogram_debug 
 
 run:
 	./venv/bin/stogram
