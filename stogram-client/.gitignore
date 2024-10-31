@@ -1,0 +1,7 @@
+venv
+privit/.*
+privit/_*
+privit/dist
+privit/src/privit.egg.info
+privit/src/utro/_*
+privit/src/privit/_*
