@@ -52,7 +52,6 @@ size_t broadcast(int fd, rliza_t * message, char * topic){
         printf("Topic: %s\n",topic);
         printf("Subscribers: %d\n",subscribers->count);
         size_t bytes_sent = 0;
-        char * json = rliza_dumps(message);
         
         for(int i = 0; i < subscribers->count; i++){
             int subscriber_fd = get_subscriber_fd_by_name(subscribers->strings[i]);
@@ -61,7 +60,7 @@ size_t broadcast(int fd, rliza_t * message, char * topic){
             }else if(subscriber_fd == fd){
                 continue;
             }else if(subscriber_fd){
-                int bytes_sent_subscriber = nsock_write_all(subscriber_fd, json, strlen(json) );
+                int bytes_sent_subscriber = write_object(subscriber_fd, message);
 
                 if(bytes_sent_subscriber == 0){
                     nsock_close(subscriber_fd);
@@ -108,20 +107,10 @@ size_t handle_message(int fd, rliza_t * message){
         //replicate(fd,message);
         rliza_free(response);
     }else if(!strcmp(event,"subscribe")){
-        //replicate(message);
         char * subscriber = rliza_get_string(message,"subscriber");
         char * subscribed_to = rliza_get_string(message,"topic");
-        int pk = subscribe(subscriber,subscribed_to);
-        rliza_t * response = rliza_new(RLIZA_OBJECT);
-        rliza_set_string(response,"topic",subscribed_to);;
-        rliza_set_string(response, "server_name",server_name);
-        bytes_sent = write_object(fd, response);
-        
-        if(strcmp(subscribed_to,"replicate")){
-            replicate(fd,message);
-        }
-        //broadcast(fd,message,subscribed_to);
-        rliza_free(response);
+        subscribe(subscriber,subscribed_to);
+        bytes_sent = 1;
     }else if(!strcmp(event,"replicate")) {
          char * subscriber = rliza_get_string(message,"subscriber");
         char * subscribed_to = "replicate";
@@ -134,19 +123,19 @@ size_t handle_message(int fd, rliza_t * message){
 
          
         char * topic = rliza_get_string(message,"topic");
-        rliza_t * publish_message = rliza_get_object(message,"message");
-        rliza_t * response = rliza_new(RLIZA_OBJECT);
-        rliza_set_string(response,"topic",topic);;
-        rliza_set_string(response, "server_name",server_name);
-        bytes_sent = write_object(fd, response);
-        rliza_free(response);
+        char * publish_message = rliza_get_string(message,"message");
         
+        //if(publish_message != NULL){
         if(strcmp(topic,"replicate")){
             replicate(fd,message);
-            broadcast(fd,publish_message,topic);
+            printf("%s\n",publish_message);
+            broadcast(fd,message,topic);
+           
         }
-        rliza_free(publish_message);
-        bytes_sent += 1;
+        //}
+        
+        
+        bytes_sent = 1;
     }else if(!strcmp(event,"execute")){
         char * query = rliza_get_string(message,"query");
         rliza_t * params = rliza_get_array(message,"params");
