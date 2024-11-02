@@ -11,6 +11,9 @@ bench:
 debug:
 	./venv/bin/stogram_debug 
 
+db:
+	./venv/bin/stogram_db
+
 run:
 	./venv/bin/stogram
 

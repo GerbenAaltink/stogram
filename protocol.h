@@ -1,57 +1,94 @@
 #include <rlib.h>
+
+#include "stogram.h"
 #include "db.h"
+#include "stogram_client.h"
+#include "session.h"
 #include <signal.h>
 
-typedef struct session_data_t
-{
-    int fd;
-    char *data;
-    char *path;
-    char *local_path;
-    FILE *f;
-    size_t size;
-    char *headers;
-    int content_length;
-    bool received_headers;
-    rhttp_request_t *request;
-    char *data_ptr;
-    unsigned int bytes_received;
-} session_data_t;
-
-void free_session(session_data_t *session)
-{
-    session->f = NULL;
-    int fd = session->fd;
-    session->content_length = 0;
-    session->data = NULL;
-    session->size = 0;
-    if (session->headers)
-        free(session->headers);
-    session->headers = NULL;
-    if (session->local_path)
-        free(session->local_path);
-    session->local_path = NULL;
-    session->headers = NULL;
-    if (session->path)
-        free(session->path);
-    session->path = NULL;
-    free(session);
-    nsock_set_data(fd, NULL);
+void ensure_replication(){
+    if(!replication_configured)
+        return;
+    if(replication_fd > 0)
+        return;
+    printf("Setting up replication to %s:%d\n",replication_host,replication_port);
+    replication_fd = sgc_connect(replication_host, replication_port);
+    if(!replication_fd){
+        printf("Setting up replication failed.\n");
+        exit(1);
+    }else{
+        printf("Setup replication: %d\n", replication_fd);
+    }
+    session_data_t * session = (session_data_t *)nsock_get_data(replication_fd);
+    //sgc_register(replication_fd, server_name);
+    sgc_subscribe(replication_fd, "replicate");
+    //sgc_subscribe(replication_fd, "publish");
+    //sgc_subscribe(replication_fd, "publish");
+    //sgc_subscribe(replication_fd, "chat");
+    register_subscriber(session->server_name,replication_fd);
+    subscribe(session->server_name, "replicate");
+    subscribe("replicate",session->server_name);
+    printf("Replication server: %s\n",session->server_name);
+    bool subscribed = sgc_subscribe(replication_fd, "publish");
+    //printf("Setup replication:%d\n");
 }
+
+
 
 void on_connect(int fd)
 {
-    // void * data = nsock_get_data(fd);
-    // if(data){
-    //   free(data);
-    //}
-    session_data_t *data = (session_data_t *)calloc(1, sizeof(session_data_t));
-    data->fd = fd;
-    //data->data_ptr = data->data;
+    ensure_replication();
+    session_data_t *data = session_new(fd);
     nsock_set_data(fd, (void *)data);
 }
+size_t write_object(int fd, rliza_t * obj){
+    char * json = rliza_dumps(obj);
+    size_t bytes_sent = nsock_write_all(fd, json, strlen(json) );
+    free(json);
+    return bytes_sent;
+}
+size_t broadcast(int fd, rliza_t * message, char * topic){
+     rstring_list_t * subscribers = get_subscribers_to(topic);
+        printf("Topic: %s\n",topic);
+        printf("Subscribers: %d\n",subscribers->count);
+        size_t bytes_sent = 0;
+        char * json = rliza_dumps(message);
+        
+        for(int i = 0; i < subscribers->count; i++){
+            int subscriber_fd = get_subscriber_fd_by_name(subscribers->strings[i]);
+            if(nsock_socks[subscriber_fd] == 0){
+                continue;
+            }else if(subscriber_fd == fd){
+                continue;
+            }else if(subscriber_fd){
+                int bytes_sent_subscriber = nsock_write_all(subscriber_fd, json, strlen(json) );
+
+                if(bytes_sent_subscriber == 0){
+                    nsock_close(subscriber_fd);
+                }
+                bytes_sent+=bytes_sent_subscriber;
+            }
+        }
+        rstring_list_free(subscribers);
+        return bytes_sent;
+}
+
+bool replicate(int fd, rliza_t * message){
+    char * event = message->get_string(message,"event");
+    if(event && strcmp(event,"replicate")){
+        broadcast(fd, message, "replicate");
+        
+    }
+    return false;
+}
+
 ulonglong event_number = 0;
 size_t handle_message(int fd, rliza_t * message){
+    ensure_replication();
+   // replicate(fd,message);
+    session_data_t * session = (session_data_t *)nsock_get_data(fd);
+    bool do_replicate = fd != replication_fd && replication_client == true;
+    
     char * event =rliza_get_string(message,"event");
     if(!event)
         return 0;
@@ -61,60 +98,66 @@ size_t handle_message(int fd, rliza_t * message){
     if(!strcmp(event,"register")){
         char * subscriber = rliza_get_string(message,"subscriber");
         register_subscriber(subscriber,fd);
+        printf("Registered subscriber\n");
         char sql[1024] = {0};
-        //sprintf(sql, "SELECT * FROM subscribers WHERE fd = %d AND time('now','-5 minutes') < last_active_time;",fd);
-        strcpy(sql,"SELECT 'success'");
-        bytes_sent = db_execute_to_stream(fd,sql,NULL);
+        
+        rliza_t * response = rliza_new(RLIZA_OBJECT);
+        rliza_set_string(response, "server_name",server_name);
+        bytes_sent = write_object(fd, response);
+
+        //replicate(fd,message);
+        rliza_free(response);
     }else if(!strcmp(event,"subscribe")){
+        //replicate(message);
         char * subscriber = rliza_get_string(message,"subscriber");
         char * subscribed_to = rliza_get_string(message,"topic");
         int pk = subscribe(subscriber,subscribed_to);
-        char sql[1024] = {0};
-        sprintf(sql, "SELECT * FROM subscriptions WHERE id = %d;",fd);
-        bytes_sent = db_execute_to_stream(fd,sql,NULL);
+        rliza_t * response = rliza_new(RLIZA_OBJECT);
+        rliza_set_string(response,"topic",subscribed_to);;
+        rliza_set_string(response, "server_name",server_name);
+        bytes_sent = write_object(fd, response);
         
-    }else if(!strcmp(event, "publish")){
-        char * name = get_subscriber_by_fd(fd);
-        if(!name){
-            nsock_close(fd);
-            return 0;
+        if(strcmp(subscribed_to,"replicate")){
+            replicate(fd,message);
         }
+        //broadcast(fd,message,subscribed_to);
+        rliza_free(response);
+    }else if(!strcmp(event,"replicate")) {
+         char * subscriber = rliza_get_string(message,"subscriber");
+        char * subscribed_to = "replicate";
+        int pk = subscribe(subscriber,subscribed_to);
+        //char sql[1024] = {0};
+        //sprintf(sql, "SELECT * FROM subscriptions  WHERE id = %d;",fd);
+        //bytes_sent = db_execute_to_stream(fd,sql,NULL);
+          
+        }else if(!strcmp(event, "publish")){
+
+         
         char * topic = rliza_get_string(message,"topic");
-        char * publish_message = rliza_get_string(message,"message");
-        ulonglong id =insert_publish(name,topic,publish_message);
-        bytes_sent = db_execute_to_stream(fd,pstr(
-            "SELECT * FROM published WHERE id = '%lld';",id   
-        ),NULL);
-        rstring_list_t * subscribers = get_subscribers_to(topic);
-        printf("Topic: %s\n",topic);
-        printf("Subscribers: %d\n",subscribers->count);
+        rliza_t * publish_message = rliza_get_object(message,"message");
+        rliza_t * response = rliza_new(RLIZA_OBJECT);
+        rliza_set_string(response,"topic",topic);;
+        rliza_set_string(response, "server_name",server_name);
+        bytes_sent = write_object(fd, response);
+        rliza_free(response);
         
-        for(int i = 0; i < subscribers->count; i++){
-            int subscriber_fd = get_subscriber_fd_by_name(subscribers->strings[i]);
-            if(nsock_socks[subscriber_fd] == 0){
-                continue;
-            }else if(subscriber_fd == fd){
-                continue;
-            }else if(subscriber_fd){
-                int bytes_sent_subscriber = db_execute_to_stream(subscriber_fd,pstr(
-                    "SELECT * FROM published WHERE id = '%lld';",id
-                ),NULL);
-                if(bytes_sent_subscriber == 0){
-                    nsock_close(subscriber_fd);
-                }
-                bytes_sent+=bytes_sent_subscriber;
-            }
+        if(strcmp(topic,"replicate")){
+            replicate(fd,message);
+            broadcast(fd,publish_message,topic);
         }
-        rstring_list_free(subscribers);
+        rliza_free(publish_message);
         bytes_sent += 1;
     }else if(!strcmp(event,"execute")){
         char * query = rliza_get_string(message,"query");
         rliza_t * params = rliza_get_array(message,"params");
         bytes_sent = db_execute_to_stream(fd,query,params ? params : NULL);
+    }else if(event){
+        replicate(fd,message);    
     }else{
+        printf("HIER!!!\n");
         nsock_close(fd);
         return 0;
-    }
+    }     
     return bytes_sent;
 }
 
@@ -123,8 +166,7 @@ void on_read(int fd)
     int buffer_size = 4096;
     session_data_t *session = (session_data_t *)nsock_get_data(fd);
     int loops = 1;
-    
-        session->data = realloc(session->data, session->bytes_received + buffer_size + 1);
+         session->data = realloc(session->data, session->bytes_received + buffer_size + 1);
         session->data_ptr = session->data;
         int bytes_received = read(fd, session->data + session->bytes_received, buffer_size);
         if (bytes_received <= 0 || *session->data == 0 || *session->data == EOF)
@@ -133,7 +175,7 @@ void on_read(int fd)
             return;
         }
         session->bytes_received += bytes_received;
-        
+       
         session->data[session->bytes_received] = 0;
         rliza_t *obj = rliza_loads(&session->data_ptr);
         if (obj)
@@ -155,6 +197,7 @@ void on_read(int fd)
                 session->data = new_data;
                 session->data_ptr = new_data;
             }
+           
             handle_message(fd, obj);
             rliza_free(obj);
         
@@ -166,7 +209,7 @@ void on_close(int fd)
     void *session = (void *)nsock_get_data(fd);
     if(session)
         free_session((session_data_t *)session);
-    printf("%s\n", rmalloc_stats());
+    sprint("Connection closed. %s\n", rmalloc_stats());
     // void * data = nsock_get_data(fd);
     // if(data)
     //   free(data);

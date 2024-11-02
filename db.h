@@ -1,6 +1,7 @@
 #ifndef STOGRAM_DB_H
 #define STOGRAM_DB_H
 #include <rlib.h>
+#include "stogram.h"
 #include <sqlite3.h>
 ulonglong _ruid = 0;
 
@@ -34,9 +35,12 @@ void db_close(){
 size_t db_execute_to_stream(int fd, char *query, rliza_t *params) {
     sqlite3_stmt *stmt = 0;
     char * escaped_query = (char *)malloc(strlen(query) + 1);
+    
     rstrstripslashes(query,escaped_query);
+    
     if (sqlite3_prepare_v2(db, escaped_query, -1, &stmt, 0) != SQLITE_OK) {
         free(escaped_query);
+
         rliza_t *error = rliza_new(RLIZA_OBJECT);
         error->set_string(error, "error", (char *)sqlite3_errmsg(db));
         error->set_boolean(error, "success", false);
@@ -48,8 +52,11 @@ size_t db_execute_to_stream(int fd, char *query, rliza_t *params) {
 
         return bytes_sent;
     } else {
+        
         free(escaped_query);
+
         if(params){
+            
             for (unsigned col = 0; col < params->count; col++) {
                 if (params->content.map[col]->type == RLIZA_INTEGER) {
                     sqlite3_bind_int(stmt, col + 1, params->content.map[col]->content.integer);
@@ -70,16 +77,20 @@ size_t db_execute_to_stream(int fd, char *query, rliza_t *params) {
                 }
             }
         }
-
+       
         rliza_t *result = rliza_new(RLIZA_OBJECT);
         result->set_boolean(result, "success", true);
+       
         if(!sqlite3_strnicmp(query, "UPDATE", 6) || !sqlite3_strnicmp(query, "DELETE", 6) || !sqlite3_strnicmp(query, "DROP", 6)) {
+
             int rows_affected = sqlite3_changes(db);
             result->set_integer(result, "rows_affected", rows_affected);
         }else if(!sqlite3_strnicmp(query, "INSERT", 6)) {
             sqlite3_int64 last_insert_id = sqlite3_last_insert_rowid(db);
             if(last_insert_id)
                 result->set_integer(result, "last_insert_id",last_insert_id);
+        
+
         }
         char *json_response = (char *)rliza_dumps(result);
         json_response[strlen(json_response) - 1] = '\0';
@@ -505,7 +516,7 @@ void create_schema(){
 rstring_list_t * get_subscribed_to(char * subscribed_to){
     rstring_list_t * list = rstring_list_new();
     sqlite3_stmt * stmt = 0;
-    char * sql = "SELECT subscriber FROM subscriptions WHERE subscribed_to = ?;";
+    char * sql = "SELECT subscriber FROM subscriptions WHERE subscribed_to = ? and fd > 0;";
     if(sqlite3_prepare_v2(db, sql, -1, &stmt, 0) != SQLITE_OK){
         raise_db_error();
     }else{
@@ -536,7 +547,7 @@ bool update_subscriber(char * name, int fd){
 
 int get_subscriber_fd_by_name(char * name){
     sqlite3_stmt * stmt = 0;
-    char * sql = "SELECT fd FROM subscribers WHERE name = ?;";
+    char * sql = "SELECT fd FROM subscribers WHERE name = ? and fd > 0;";
     if(sqlite3_prepare_v2(db, sql, -1, &stmt, 0) != SQLITE_OK){
         raise_db_error();
     }else{
@@ -572,13 +583,11 @@ char * get_subscriber_by_fd(int fd){
 rstring_list_t * get_subscribers_to(char * topic){
     sqlite3_stmt * stmt = 0;
     rstring_list_t * result = rstring_list_new();
-    char * sql = "SELECT subscriber FROM subscriptions WHERE subscribed_to = ? GROUP BY subscriber;;";
+    char * sql = "SELECT subscriber FROM subscriptions INNER JOIN subscribers on (subscriptions.subscriber = subscribers.name and subscribers.fd > 0) where subscribed_to = ? GROUP BY subscriber;;";
     if(sqlite3_prepare_v2(db, sql, -1, &stmt, 0) != SQLITE_OK){
         
         raise_db_error();
-    }else{
-        printf("HAAA %s\n",topic);
-        
+    }else{ 
         sqlite3_bind_text(stmt, 1, topic, -1, SQLITE_STATIC);
     }
     while(sqlite3_step(stmt) == SQLITE_ROW){
