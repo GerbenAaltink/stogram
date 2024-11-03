@@ -545,6 +545,27 @@ bool update_subscriber(char * name, int fd){
     return sqlite3_changes(db) > 0;
 }
 
+int * get_subscriber_fds_by_name(char * name){
+    static int result[1000] = {0};
+    memset(result,0,sizeof(result));
+    int index = 0;
+    sqlite3_stmt * stmt = 0;
+    char * sql = "SELECT fd FROM subscribers WHERE name = ? and fd > 0;";
+    if(sqlite3_prepare_v2(db, sql, -1, &stmt, 0) != SQLITE_OK){
+        raise_db_error();
+    }else{
+        sqlite3_bind_text(stmt, 1, name, -1, SQLITE_STATIC);
+    }
+    int fd = 0;
+    while(sqlite3_step(stmt) == SQLITE_ROW){
+        fd = sqlite3_column_int(stmt, 0);
+        result[index] = fd;
+        index++;
+    }
+    sqlite3_finalize(stmt);
+    return result;
+}
+
 int get_subscriber_fd_by_name(char * name){
     sqlite3_stmt * stmt = 0;
     char * sql = "SELECT fd FROM subscribers WHERE name = ? and fd > 0;";
@@ -566,17 +587,21 @@ void unset_subscriber_fd(int fd){
 }
 char * get_subscriber_by_fd(int fd){
     sqlite3_stmt * stmt = 0;
-    char * sql = "SELECT name FROM subscribers WHERE fd = ?;";
+    char * sql = "SELECT name FROM subscribers WHERE fd = ? AND NOT name IS NULL AND NAME !='' AND fd > 0;";
     if(sqlite3_prepare_v2(db, sql, -1, &stmt, 0) != SQLITE_OK){
         raise_db_error();
     }else{
         sqlite3_bind_int(stmt, 1, fd);
     }
-    char * name = 0;
+    char * name = NULL;
+    printf("HIEROO 1\n");
     if(sqlite3_step(stmt) == SQLITE_ROW){
-        name = sbuf((char *)sqlite3_column_text(stmt, 0));
+        const char * res = sqlite3_column_text(stmt, 0);
+        if(res)
+            name = sbuf((char *)res);
     }
     sqlite3_finalize(stmt);
+    printf("HIERROO 3\n");
     return name;
 }
 

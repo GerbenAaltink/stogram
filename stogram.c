@@ -31,7 +31,7 @@ int main(int argc, char *argv[]){
     //subscribe(server_name, "subscribe");
     //return 0;
     printf("Serving on port %d.\n", port);
-    printf("Server name: %s.\n", server_name);
+    rprinty("Name: %s.\n", server_name);
     http_serve(port);
     db_close();
 }
