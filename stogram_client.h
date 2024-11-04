@@ -48,13 +48,14 @@ int sgc_connect(char *host, int port)
     rliza_set_string(message, "event", "register");
     rliza_set_string(message, "subscriber", server_name);
 
-    rliza_t *result = sgc_call(fd, message); // nsock_write_all(fd, json, rliza_validate(json));
+    rliza_t * result = sgc_call(fd, message); // nsock_write_all(fd, json, rliza_validate(json));
+        rliza_free(message);
+
     if (!result)
     {
 
         printf("HIERR 141\n");
-        rliza_free(message);
-
+        
         printf("HIERR 142\n");
 
         printf("HIERR 143|n");
@@ -63,13 +64,12 @@ int sgc_connect(char *host, int port)
 
         printf("HIERR 144|n");
         return fd;
-    }else{
-        char * json = rliza_dumps(result);
-        printf("Subscribed! %s",json);
     }
-    session->server_name = strdup(result->get_string(result, "server_name"));
-    rliza_free(result);
-    rliza_free(message);
+       rliza_free(result);
+        printf("Subscribed!");
+    
+    //session->server_name = strdup(uuid4()); //strdup(result->get_string(result, "server_name"));
+    
     return fd;
 }
 
@@ -77,7 +77,7 @@ rliza_t *sgc_read(int fd)
 {
     printf("START READ\n");
     session_data_t *session = (session_data_t *)nsock_get_data(fd);
-    size_t buffer_size = 1;
+    size_t buffer_size = 4096;
     rliza_t *obj = NULL;
     rfd_wait_forever(fd);
     while (true)
@@ -102,15 +102,18 @@ rliza_t *sgc_read(int fd)
         rliza_t *obj = rliza_loads(&session->data_ptr);
         if (obj)
         {
+
+            return obj;
             printf("AFter reads %s",session->data);
             long length = session->data_ptr - session->data ;
             if (length <= 0)
             {
+
                 free(session->data);
                 session->data = NULL;
                 session->bytes_received = 0;
                 session->data_ptr = NULL;
-                return obj;;
+
             }
             else
             {
@@ -122,15 +125,9 @@ rliza_t *sgc_read(int fd)
                 session->data_ptr = new_data;
             }
 
-    printf("END READ\n");
-            return obj;
         }
     }
-    if (obj)
-    {
-        printf("WAA\n");
-    }
-    return obj;
+    return NULL;
 }
 
 size_t sgc_subscribe(int fd, char *topic)
@@ -155,15 +152,11 @@ bool sgc_publish(int fd, char *topic, rliza_t *message)
     payload->set_object(payload, "message",message);
     //payload->set_object(payload, "message", message);
     rliza_t * result = sgc_call(fd, payload);
+    rliza_free(payload);
     if(result){
-        char * json = rliza_dumps(result);
-        printf("%s\n",json);
-        rliza_free(result);
-        rliza_free(payload);
+        rliza_free(result);;
         return true;
     }
-
-        rliza_free(payload);
     return false;
 }
 

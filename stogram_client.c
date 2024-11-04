@@ -32,7 +32,7 @@ int main(int argc, char *argv[])
         rliza_set_string(message, "message", "true");
         //char *json = rliza_dumps(message);
         //sgc_ping(fd,true);
-        sgc_publish(fd,"publish",message);
+        sgc_publish(fd,"chat",message);
         
         rliza_free(message);
         //sgc_ping(fd,true);

@@ -1,2 +1,2 @@
 .vscode
-local.db
+local*.db

@@ -6,7 +6,7 @@ async def connect(host, port):
     return reader,writer 
 async def stream(reader, writer,port):
     while True:
-        chunk = await reader.read(10)
+        chunk = await reader.read(4096)
         
         if chunk and b'Index' in chunk:
             chunk = chunk.replace(b'Index',str(port).encode('utf-8'))
@@ -45,7 +45,7 @@ async def serve(host, port, ports):
 async def main():
     tasks = []
     tasks.append(asyncio.create_task( serve("127.0.0.1", 7000,[8084,8085,8086])))
-    tasks.append(asyncio.create_task(serve("127.0.0.1", 7001,[8889,9000,9001])))
+    tasks.append(asyncio.create_task(serve("127.0.0.1", 7001,[8889])))
     await asyncio.gather(*tasks)
 
 asyncio.run(main())
