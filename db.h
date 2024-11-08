@@ -35,14 +35,15 @@ void db_close(){
 size_t db_execute_to_stream(int fd, char *query, rliza_t *params) {
     sqlite3_stmt *stmt = 0;
     char * escaped_query = (char *)malloc(strlen(query) + 1);
-    
     rstrstripslashes(query,escaped_query);
-    
     if (sqlite3_prepare_v2(db, escaped_query, -1, &stmt, 0) != SQLITE_OK) {
         free(escaped_query);
-
         rliza_t *error = rliza_new(RLIZA_OBJECT);
-        error->set_string(error, "error", (char *)sqlite3_errmsg(db));
+        char * error_string = (char *)sqlite3_errmsg(db);
+         char * escaped_error_string = (char *)malloc(strlen(error_string) * 2 + 1);
+        rstraddslashes(error_string,escaped_error_string);
+        error->set_string(error, "error", escaped_error_string);
+        free(escaped_error_string);
         error->set_boolean(error, "success", false);
         char *json_response = (char *)rliza_dumps(error);
 
@@ -79,8 +80,7 @@ size_t db_execute_to_stream(int fd, char *query, rliza_t *params) {
         }
        
         rliza_t *result = rliza_new(RLIZA_OBJECT);
-        result->set_boolean(result, "success", true);
-       
+        result->set_boolean(result, "success",true);
         if(!sqlite3_strnicmp(query, "UPDATE", 6) || !sqlite3_strnicmp(query, "DELETE", 6) || !sqlite3_strnicmp(query, "DROP", 6)) {
 
             int rows_affected = sqlite3_changes(db);
@@ -93,7 +93,7 @@ size_t db_execute_to_stream(int fd, char *query, rliza_t *params) {
 
         }
         char *json_response = (char *)rliza_dumps(result);
-        json_response[strlen(json_response) - 1] = '\0';
+        json_response[strlen(json_response)-1] = '\0';
         int bytes_sent = nsock_write_all(fd,json_response,strlen(json_response)); 
         free(json_response);
         if (!bytes_sent){
@@ -128,7 +128,6 @@ size_t db_execute_to_stream(int fd, char *query, rliza_t *params) {
                     return 0;
                 }
             }
-
             for (int col = 0; col < sqlite3_column_count(stmt); col++) {
                 int type = sqlite3_column_type(stmt, col);
                 switch (type) {
@@ -200,7 +199,11 @@ size_t db_execute_to_stream2(int fd, char *query, rliza_t *params) {
     if (sqlite3_prepare_v2(db, escaped_query, -1, &stmt, 0) != SQLITE_OK) {
         free(escaped_query);
         rliza_t *error = rliza_new(RLIZA_OBJECT);
-        error->set_string(error, "error", (char *)sqlite3_errmsg(db));
+        char * error_string = (char *)sqlite3_errmsg(db);
+        char * escaped_error_string = (char *)malloc(strlen(error_string) * 2 + 1);
+        rstraddslashes(error_string,escaped_error_string);
+        error->set_string(error, "error", escaped_error_string);
+        free(escaped_error_string);
         error->set_boolean(error, "success", false);
         char *json_response = (char *)rliza_dumps(error);
 

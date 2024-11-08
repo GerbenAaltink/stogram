@@ -55,6 +55,7 @@ void on_connect(int fd)
     ensure_replication();
     session_data_t *data = session_new(fd);
     nsock_set_data(fd, (void *)data);
+
 }
 size_t write_object(int fd, rliza_t *obj)
 {
@@ -92,16 +93,17 @@ void broadcast(int fd, rliza_t *message)
 
         while (subscriber_fds[subscriber_index] > 0)
         {
+            printf("SPREADING EVENT TO %d\n",subscriber_fds[subscriber_index]);
             int subscriber_fd = subscriber_fds[subscriber_index];
             subscriber_index++;
             if (nsock_socks[subscriber_fd] == 0)
             {
                 continue;
             }
-            else if (subscriber_fd == fd)
+          /*   else if (subscriber_fd == fd)
             {
                 continue;
-            }
+            }*/
             else if (fd == nsock_server_fd)
             {
                 continue;
@@ -109,9 +111,6 @@ void broadcast(int fd, rliza_t *message)
             else if (subscriber_fd)
             {
                 bool success = write_object(subscriber_fd, payload);
-                char * json = rliza_dumps(payload);
-                printf("%s\n",json);
-                free(json);
                 if (!success)
                 {
                     nsock_close(subscriber_fd);
@@ -125,7 +124,7 @@ void broadcast(int fd, rliza_t *message)
         }
     }
     rstring_list_free(subscribers);
-    ;
+    printf("Broadcasted\n");
 }
 
 bool is_replicator(int fd)
@@ -176,6 +175,8 @@ void replicate(int sender_fd, rliza_t *message)
 ulonglong event_number = 0;
 size_t handle_message(int fd, rliza_t *message)
 {
+
+    printf("START OF HANDLE MESSAGE\n");
     ensure_replication();
     session_data_t *session = (session_data_t *)nsock_get_data(fd);
     char *event = rliza_get_string(message, "event");
@@ -229,11 +230,15 @@ size_t handle_message(int fd, rliza_t *message)
         char *topic = rliza_get_string(message, "topic");
         printf("Publish: %s.\n", topic);
         rliza_t * event_object = rliza_get_object(message, "message");
+        event_object->type = RLIZA_OBJECT;
         bytes_sent = write_object(fd, event_object);
+        broadcast(fd, message);
+        
     }
     else if (!strcmp(event, "execute"))
     {
         char *query = rliza_get_string(message, "query");
+
         rliza_t *params = rliza_get_array(message, "params");
         bytes_sent = db_execute_to_stream(fd, query, params ? params : NULL);
     }
@@ -254,7 +259,7 @@ void on_read(int fd)
 {
     size_t bytes_sent;
     read_count++;
-    int buffer_size = 4096;
+    int buffer_size = 1024*1024*10;
     session_data_t *session = (session_data_t *)nsock_get_data(fd);
     int loops = 1;
     session->data = realloc(session->data, session->bytes_received + buffer_size + 1);
@@ -268,12 +273,11 @@ void on_read(int fd)
     session->bytes_received += bytes_received;
 
     session->data[session->bytes_received] = 0;
-
     rliza_t *obj = rliza_loads(&session->data_ptr);
     if (obj)
     {
         bool repeat = false;
-        size_t length = session->data_ptr - session->data;
+        size_t length = rliza_validate(session->data);
         session->bytes_received -= length;
         if (!session->bytes_received)
         {
@@ -288,14 +292,14 @@ void on_read(int fd)
             strncpy(new_data, session->data + length, session->bytes_received);
             free(session->data);
             session->data = new_data;
-            session->data_ptr = new_data;
+            session->data_ptr = session->data;
+            session->bytes_received = bytes_received;
             repeat = false;
         }
         bytes_sent = handle_message(fd, obj);
         rliza_free(obj);
         if (repeat)
         {
-            printf("REPEAT: %d", repeat);
             on_read(fd);
         }
     }

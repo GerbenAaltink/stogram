@@ -2,7 +2,7 @@ all: build run
 
 build:
 	-@rm -r ./stogram
-	gcc stogram.c -o stogram -lsqlite3
+	gcc -g -O0 stogram.c -o stogram -lsqlite3
 
 replication:
 	./stogram --port 9000 --db "local3.db" --rhost "127.0.0.1" --rport 8889 --verbose
@@ -12,4 +12,4 @@ replication2:
 
 
 run:
-	./stogram --verbose --port 8889 --db "local1.db"
+	./stogram --verbose --port 8889 --db "local1.db" -std=c2x

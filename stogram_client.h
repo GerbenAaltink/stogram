@@ -9,26 +9,20 @@ rliza_t *sgc_read(int fd);
 
 size_t sgc_write(int fd, rliza_t *message)
 {
-    printf("BEFORE WRITE\n");
     char *json = rliza_dumps(message);
     size_t bytes_sent = nsock_write_all(fd, json, strlen(json));
     if (bytes_sent == 0)
     {
-        printf("FAILED!\n");
         free(json);
         nsock_close(fd);
         return false;
     }
-    printf("Written: %s.\n",json);
     free(json);
-
-    printf("AFTER WRITE\n");
     return bytes_sent;
 }
 rliza_t *sgc_call(int fd, rliza_t *message)
 {
 
-    printf("START CALL\n");
     if (!sgc_write(fd, message))
         return NULL;
     return sgc_read(fd);
@@ -54,15 +48,8 @@ int sgc_connect(char *host, int port)
     if (!result)
     {
 
-        printf("HIERR 141\n");
-        
-        printf("HIERR 142\n");
-
-        printf("HIERR 143|n");
         nsock_close(fd);
         fd = 0;
-
-        printf("HIERR 144|n");
         return fd;
     }
        rliza_free(result);
