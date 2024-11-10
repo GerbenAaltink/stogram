@@ -176,7 +176,7 @@ ulonglong event_number = 0;
 size_t handle_message(int fd, rliza_t *message)
 {
 
-    printf("START OF HANDLE MESSAGE\n");
+    printf("START HANDLE\n");
     ensure_replication();
     session_data_t *session = (session_data_t *)nsock_get_data(fd);
     char *event = rliza_get_string(message, "event");
@@ -192,7 +192,9 @@ size_t handle_message(int fd, rliza_t *message)
     {
 
         rliza_t *response = rliza_new(RLIZA_OBJECT);
-        rliza_set_string(response, "event", pstr("pong %lld", session->ping++));
+         session->ping++;
+        printf("%s\n",pstr("pong %lld",session->ping));
+        rliza_set_string(response, "event", pstr("pong %lld",session->ping));
         bytes_sent = write_object(fd, response);
         rliza_free(response);
     }
@@ -232,6 +234,7 @@ size_t handle_message(int fd, rliza_t *message)
         rliza_t * event_object = rliza_get_object(message, "message");
         event_object->type = RLIZA_OBJECT;
         bytes_sent = write_object(fd, event_object);
+        //write_success(fd,true);
         broadcast(fd, message);
         
     }
@@ -252,6 +255,7 @@ size_t handle_message(int fd, rliza_t *message)
         printf("No event specified. Exiting.\n");
         exit(1);
     }
+    printf("END HANDLE\n");
     return bytes_sent;
 }
 unsigned int read_count = 0;
@@ -259,7 +263,7 @@ void on_read(int fd)
 {
     size_t bytes_sent;
     read_count++;
-    int buffer_size = 1024*1024*10;
+    int buffer_size = 1024;
     session_data_t *session = (session_data_t *)nsock_get_data(fd);
     int loops = 1;
     session->data = realloc(session->data, session->bytes_received + buffer_size + 1);

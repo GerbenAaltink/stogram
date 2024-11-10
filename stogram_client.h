@@ -10,7 +10,8 @@ rliza_t *sgc_read(int fd);
 size_t sgc_write(int fd, rliza_t *message)
 {
     char *json = rliza_dumps(message);
-    size_t bytes_sent = nsock_write_all(fd, json, strlen(json));
+    //printf("%s\n",json);
+    size_t bytes_sent = nsock_write_all(fd, json, strlen(json) );
     if (bytes_sent == 0)
     {
         free(json);
@@ -53,7 +54,6 @@ int sgc_connect(char *host, int port)
         return fd;
     }
        rliza_free(result);
-        printf("Subscribed!");
     
     //session->server_name = strdup(uuid4()); //strdup(result->get_string(result, "server_name"));
     
@@ -62,11 +62,9 @@ int sgc_connect(char *host, int port)
 
 rliza_t *sgc_read(int fd)
 {
-    printf("START READ\n");
     session_data_t *session = (session_data_t *)nsock_get_data(fd);
-    size_t buffer_size = 4096;
+    size_t buffer_size = 100;
     rliza_t *obj = NULL;
-    rfd_wait_forever(fd);
     while (true)
     {
         session->data = realloc(session->data, session->bytes_received + buffer_size + 1);
@@ -87,32 +85,38 @@ rliza_t *sgc_read(int fd)
 
         session->data[session->bytes_received] = 0;
         rliza_t *obj = rliza_loads(&session->data_ptr);
-        if (obj)
+         if (obj)
+    {
+        //free(session->data);
+        //session->data = NULL;
+       // session->bytes_received = 0;
+       // session->bytes_received = 0;
+       // return obj;
+        bool repeat = false;
+        size_t length = rliza_validate(session->data);
+        session->bytes_received -= length;
+        if (!session->bytes_received)
         {
-
             return obj;
-            printf("AFter reads %s",session->data);
-            long length = session->data_ptr - session->data ;
-            if (length <= 0)
-            {
-
-                free(session->data);
-                session->data = NULL;
-                session->bytes_received = 0;
-                session->data_ptr = NULL;
-
-            }
-            else
-            {
-                session->bytes_received -= length;
-                char *new_data = (char *)malloc(session->bytes_received);
-                strncpy(new_data, session->data + length, session->bytes_received);
-                free(session->data);
-                session->data = new_data;
-                session->data_ptr = new_data;
-            }
-
+            free(session->data);
+            session->data = NULL;
+            session->bytes_received = 0;
+            session->data_ptr = NULL;
+            
         }
+        else
+        {
+            printf("GRRR\n");
+            char *new_data = (char *)malloc(session->bytes_received + 1);
+            strncpy(new_data, session->data + length, session->bytes_received);
+            free(session->data);
+            session->data = new_data;
+            session->data_ptr = session->data;
+            session->bytes_received = session->bytes_received;
+            repeat = false;
+        }
+        return obj;
+    }
     }
     return NULL;
 }
@@ -138,6 +142,8 @@ bool sgc_publish(int fd, char *topic, rliza_t *message)
     payload->set_string(payload, "topic", topic);
     payload->set_object(payload, "message",message);
     //payload->set_object(payload, "message", message);
+    char * json = rliza_dumps(payload);
+    printf("%s\n", json);
     rliza_t * result = sgc_call(fd, payload);
     rliza_free(payload);
     if(result){
@@ -156,7 +162,7 @@ rliza_t *message = rliza_new(RLIZA_OBJECT);
         rliza_t * response = sgc_call(fd, message);
         if(prin){
         char *json = rliza_dumps(response);
-            printf("%s\n", json);
+           
             free(json);
         }
         rliza_free(response);
