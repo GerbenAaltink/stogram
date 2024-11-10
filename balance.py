@@ -44,8 +44,8 @@ async def serve(host, port, ports):
 
 async def main():
     tasks = []
-    tasks.append(asyncio.create_task( serve("127.0.0.1", 7000,[8084,8085,8086])))
-    tasks.append(asyncio.create_task(serve("127.0.0.1", 7001,[8889])))
+    tasks.append(asyncio.create_task( serve("0.0.0.0", 7000,[8084,8085,8086])))
+    tasks.append(asyncio.create_task(serve("0.0.0.0", 7001,[8889])))
     await asyncio.gather(*tasks)
 
 asyncio.run(main())
