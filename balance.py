@@ -15,7 +15,6 @@ async def stream(reader, writer,port):
             writer.close()
             return 
         writer.write(chunk)
-        await writer.drain()
 
 async def forward(reader, writer, port): 
     print("Streaming to port",port)
