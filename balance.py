@@ -17,12 +17,9 @@ async def stream(reader, writer,port):
         writer.write(chunk)
         await writer.drain()
 
-def get_random_port():
-    return random.choice([8084,8085,8086])
-
 async def forward(reader, writer, port): 
     print("Streaming to port",port)
-    upstream_reader, upstream_writer = await connect("127.0.0.1", port)
+    upstream_reader, upstream_writer = await connect("stogram", port)
     tasks = []
     tasks.append(asyncio.create_task(stream(reader, upstream_writer,port)))
     tasks.append(asyncio.create_task(stream(upstream_reader, writer,port)))
@@ -45,7 +42,7 @@ async def serve(host, port, ports):
 
 async def main():
     tasks = []
-    tasks.append(asyncio.create_task( serve("0.0.0.0", 7000,[8084,8085,8086])))
+    tasks.append(asyncio.create_task( serve("0.0.0.0", 7000,[8086,8085,8084])))
     tasks.append(asyncio.create_task(serve("0.0.0.0", 7001,[8889])))
     await asyncio.gather(*tasks)
 
