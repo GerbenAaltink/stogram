@@ -4,6 +4,10 @@ build:
 	-@rm -r ./stogram
 	gcc stogram.c -o stogram -lsqlite3 -Ofast
 
+client:
+	gcc stogram_client.c -o stogram_client -Ofast
+	time ./stogram_client
+
 replication:
 	./stogram --port 9000 --db "local3.db" --rhost "127.0.0.1" --rport 8889 --verbose
 

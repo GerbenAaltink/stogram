@@ -98,6 +98,7 @@ void broadcast(int fd, rliza_t *message)
             subscriber_index++;
             if (nsock_socks[subscriber_fd] == 0)
             {
+                unset_subscriber_fd(subscriber_fd);
                 continue;
             }
           /*   else if (subscriber_fd == fd)
@@ -113,6 +114,7 @@ void broadcast(int fd, rliza_t *message)
                 bool success = write_object(subscriber_fd, payload);
                 if (!success)
                 {
+                    unset_subscriber_fd(subscriber_fd);
                     nsock_close(subscriber_fd);
                 }
                 else
@@ -248,14 +250,12 @@ size_t handle_message(int fd, rliza_t *message)
     else if (event)
     {
         printf("Unexpected event: %s. Exiting.\n", event);
-        exit(1);
     }
     else
     {
         printf("No event specified. Exiting.\n");
-        exit(1);
     }
-    printf("END HANDLE\n");
+    printf("%s\n",rmalloc_stats());
     return bytes_sent;
 }
 unsigned int read_count = 0;

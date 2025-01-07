@@ -10,6 +10,7 @@ void rstring_list_dump(rstring_list_t * list){
 }
 
 int main(int argc, char *argv[]){
+    setbuf(stdout,NULL);
     server_name = strdup(uuid4());
     int port = rargs_get_option_int(argc,argv,"--port",8889);
     verbose = rargs_isset(argc,argv,"--verbose");
